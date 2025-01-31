@@ -39,7 +39,7 @@ it('can retrieve all bookings', function () {
 
     $response = $this->getJson('/api/bookings');
     $response->assertStatus(Response::HTTP_OK)
-        ->assertJsonCount(3);
+        ->assertJsonCount(3, 'data');
 });
 
 it('can retrieve all bookings performing ok', function(){

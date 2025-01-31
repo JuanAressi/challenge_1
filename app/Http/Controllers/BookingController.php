@@ -4,12 +4,34 @@ namespace App\Http\Controllers;
 
 use App\Models\Booking;
 use Illuminate\Http\Request;
+use App\Exports\BookingsExport;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Http\Requests\StoreBookingRequest;
+use App\Http\Requests\UpdateBookingRequest;
+use App\Mail\BookingConfirmation;
+use Illuminate\Support\Facades\Mail;
 
 class BookingController extends Controller
 {
     public function index(Request $request)
     {
         $query = Booking::query();
+
+        if ($request->has('customer_name')) {
+            $query->where('customer_name', 'like', '%' . $request->customer_name . '%');
+        }
+
+        if ($request->has('tour_name')) {
+            $query->whereHas('tour', function ($q) use ($request) {
+                $q->where('name', 'like', '%' . $request->tour_name . '%');
+            });
+        }
+
+        if ($request->has('hotel_name')) {
+            $query->whereHas('hotel', function ($q) use ($request) {
+                $q->where('name', 'like', '%' . $request->hotel_name . '%');
+            });
+        }
 
         if ($request->has('start_date')) {
             $query->where('booking_date', '>=', $request->start_date);
@@ -19,28 +41,27 @@ class BookingController extends Controller
             $query->where('booking_date', '<=', $request->end_date);
         }
 
-        $bookings = $query->get();
+        $sortField = $request->input('sort_by', 'created_at');
+        $sortDirection = $request->input('sort_direction', 'desc');
 
-        foreach ($bookings as $booking) {
-            $booking->tour;
-            $booking->hotel;
+        $allowedSortFields = ['customer_name', 'booking_date', 'number_of_people', 'created_at'];
+
+        if (in_array($sortField, $allowedSortFields)) {
+            $query->orderBy($sortField, $sortDirection === 'asc' ? 'asc' : 'desc');
         }
 
-        return response()->json($bookings, 200);
+        $perPage = $request->input('per_page', 15);
+
+        return $query->with(['tour', 'hotel'])->paginate($perPage);
     }
 
-    public function store(Request $request)
+    public function store(StoreBookingRequest $request)
     {
-        $validatedData = $request->validate([
-            'tour_id' => 'required|exists:tours,id',
-            'hotel_id' => 'required|exists:hotels,id',
-            'customer_name' => 'required|string|max:255',
-            'customer_email' => 'required|email|max:255',
-            'number_of_people' => 'required|integer|min:1',
-            'booking_date' => 'required|date',
-        ]);
+        $booking = Booking::create($request->validated());
 
-        $booking = Booking::create($validatedData);
+        Mail::to($booking->customer_email)
+            ->send(new BookingConfirmation($booking));
+
         return response()->json($booking, 201);
     }
 
@@ -49,24 +70,47 @@ class BookingController extends Controller
         return response()->json($booking, 200);
     }
 
-    public function update(Request $request, Booking $booking)
+    public function update(UpdateBookingRequest $request, $id)
     {
-        $validatedData = $request->validate([
-            'tour_id' => 'sometimes|exists:tours,id',
-            'hotel_id' => 'sometimes|exists:hotels,id',
-            'customer_name' => 'sometimes|string|max:255',
-            'customer_email' => 'sometimes|email|max:255',
-            'number_of_people' => 'sometimes|integer|min:1',
-            'booking_date' => 'sometimes|date',
-        ]);
-
-        $booking->update($validatedData);
-        return response()->json($booking, 200);
+        $booking = Booking::findOrFail($id);
+        $booking->update($request->validated());
+        
+        return response()->json($booking);
     }
 
     public function destroy(Booking $booking)
     {
         $booking->delete();
         return response()->json(null, 204);
+    }
+
+    public function export()
+    {
+        return Excel::download(new BookingsExport, 'bookings.csv');
+    }
+
+    public function cancel($id)
+    {
+        $booking = Booking::find($id);
+        
+        if (!$booking) {
+            return response()->json([
+                'message' => 'Booking not found'
+            ], 404);
+        }
+        
+        if ($booking->status === Booking::STATUS_CANCELED) {
+            return response()->json([
+                'message' => 'Booking is already canceled',
+                'status' => $booking->status
+            ], 422);
+        }
+        
+        $booking->update(['status' => Booking::STATUS_CANCELED]);
+        
+        return response()->json([
+            'message' => 'Booking canceled successfully',
+            'status' => $booking->status
+        ], 200);
     }
 }

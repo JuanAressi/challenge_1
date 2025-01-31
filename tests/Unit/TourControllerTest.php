@@ -30,7 +30,7 @@ it('can retrieve all tours', function () {
 
     $response = $this->getJson('/api/tours');
     $response->assertStatus(Response::HTTP_OK)
-        ->assertJsonCount(3);
+        ->assertJsonCount(3, 'data');
 });
 
 it('can retrieve tours with filters', function () {

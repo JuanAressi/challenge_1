@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Hotel;
 use Illuminate\Http\Request;
+use App\Http\Requests\StoreHotelRequest;
 
 class HotelController extends Controller
 {
@@ -27,20 +28,13 @@ class HotelController extends Controller
             $query->where('price_per_night', '<=', $request->max_price);
         }
 
-        return response()->json($query->get(), 200);
+        $perPage = $request->input('per_page', 15);
+        return $query->paginate($perPage);
     }
 
-    public function store(Request $request)
+    public function store(StoreHotelRequest $request)
     {
-        $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'required|string',
-            'address' => 'required|string',
-            'rating' => 'required|integer',
-            'price_per_night' => 'required|numeric',
-        ]);
-
-        $hotel = Hotel::create($validatedData);
+        $hotel = Hotel::create($request->validated());
         return response()->json($hotel, 201);
     }
 
@@ -49,18 +43,11 @@ class HotelController extends Controller
         return response()->json($hotel, 200);
     }
 
-    public function update(Request $request, Hotel $hotel)
+    public function update(StoreHotelRequest $request, $id)
     {
-        $validatedData = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'description' => 'sometimes|string',
-            'address' => 'sometimes|string',
-            'rating' => 'sometimes|integer',
-            'price_per_night' => 'sometimes|numeric',
-        ]);
-
-        $hotel->update($validatedData);
-        return response()->json($hotel, 200);
+        $hotel = Hotel::findOrFail($id);
+        $hotel->update($request->validated());
+        return response()->json($hotel);
     }
 
     public function destroy(Hotel $hotel)

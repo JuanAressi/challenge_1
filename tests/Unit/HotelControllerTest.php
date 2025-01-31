@@ -31,7 +31,7 @@ it('can retrieve all hotels', function () {
 
     $response = $this->getJson('/api/hotels');
     $response->assertStatus(Response::HTTP_OK)
-        ->assertJsonCount(3);
+        ->assertJsonCount(3, 'data');
 });
 
 it('can retrieve hotels with filters', function () {
